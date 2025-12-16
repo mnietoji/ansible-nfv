@@ -36,7 +36,7 @@
     instance_nics: "{{ instance_nics + [item['ports']] }}"
   loop: "{{ instance_ports['results'] }}"
 
-- name: Attempt To Discover External Floating IP From OpenStack APIs
+- name: Attempt To Discover External Floating IP From OpenStack APIs (IPv4)
   block:
     - name: Parse Floating IP Attribute From APIs
       set_fact:
@@ -50,4 +50,28 @@
           - "Instance external floating IP can not be parsed"
           - "Recieved value: {{ instance_external_ip }}"
       when: instance_external_ip == "None" or instance_external_ip == "[Undefined]"
-  when: discover_instance_external_ip
+  when:
+    - discover_instance_external_ip
+    - ip_version | default(4) | int == 4
+
+- name: Attempt To Discover External IPv6 Address From OpenStack APIs (IPv6)
+  block:
+    - name: Parse IPv6 Address From External Network
+      set_fact:
+        instance_external_ip: "{{ discovered_instance['servers'][0]['addresses'][item] | selectattr('version', 'equalto', 6) | map(attribute='addr') | list | first }}"
+      loop: "{{ discovered_instance['servers'][0]['addresses'] | flatten(levels=1) }}"
+      when:
+        - discovered_instance['servers'][0]['addresses'][item] | selectattr('version', 'equalto', 6) | list != []
+        - external_network_name is defined
+        - item == external_network_name
+
+    - name: Fail To Discover Instance External IPv6 Address
+      fail:
+        msg:
+          - "Instance external IPv6 address can not be parsed"
+          - "Recieved value: {{ instance_external_ip }}"
+          - "Please ensure 'external_network_name' variable is set to the external network name"
+      when: instance_external_ip == "None" or instance_external_ip == "[Undefined]"
+  when:
+    - discover_instance_external_ip
+    - ip_version | default(4) | int == 6
