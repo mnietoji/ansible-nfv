@@ -1,0 +1,56 @@
+---
+# EVPN Type-5 VXLAN NDR (SKELETON). Runs on the TRex VM host (the play that
+# includes this role must target the trex group, same as the stock
+# binary_search). TRex must already be up in interactive mode (launch_trex).
+
+- name: EVPN NDR | stage the VXLAN NDR runner on the TRex VM (shipped in-role)
+  ansible.builtin.copy:
+    src: "{{ evpn_ndr_script_name }}"
+    dest: "{{ evpn_ndr_script_dest }}"
+    mode: "0755"
+
+- name: EVPN NDR | run the strict zero-loss binary search
+  # The runner emits a parse-compatible line: "EVPN_NDR tx_pps rx_pps <pps>,".
+  # ignore_errors so we still collect the partial log on a crash, mirroring the
+  # stock binary_search rescue behaviour.
+  ansible.builtin.command: >-
+    python3 {{ evpn_ndr_script_dest }}
+    {{ evpn_trex_dir }}
+    {{ evpn_ndr_frame }}
+    {{ evpn_ndr_duration }}
+    {{ evpn_ndr_lo }}
+    {{ evpn_ndr_hi }}
+  become: true
+  changed_when: true
+  register: evpn_ndr_output
+  ignore_errors: true
+
+- name: EVPN NDR | save result to the run log
+  ansible.builtin.copy:
+    content: "{{ evpn_ndr_output.stdout }}\n"
+    dest: "{{ evpn_binary_search_run_log }}"
+    mode: "0644"
+
+# Copy to binary_perf_log on the undercloud exactly like binary_search does, so
+# report_junitxml (grep tx_pps | awk ... *2) and ELK upload work unchanged.
+- name: EVPN NDR | publish result as binary_perf_log on the undercloud
+  ansible.builtin.copy:
+    content: "{{ evpn_ndr_output.stdout }}\n"
+    dest: "{{ binary_perf_log }}"
+    mode: "0644"
+  delegate_to: "{{ groups['undercloud'] | first }}"
+
+- name: EVPN NDR | stop TRex traffic session on the TRex VM
+  ansible.builtin.shell: "tmux list-sessions -F '#S' | xargs -n1 tmux kill-session -t"
+  become: true
+  changed_when: true
+  failed_when: false
+
+- name: EVPN NDR | show result
+  ansible.builtin.debug:
+    msg: "{{ evpn_ndr_output.stdout_lines | default([]) }}"
+
+- name: EVPN NDR | fail if the runner did not succeed
+  ansible.builtin.fail:
+    msg: "EVPN VXLAN NDR runner failed (rc={{ evpn_ndr_output.rc | default('n/a') }})"
+  when: evpn_ndr_output.rc | default(1) != 0

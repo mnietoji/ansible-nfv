@@ -1,0 +1,26 @@
+---
+# evpn_binary_search -- drives the self-contained EVPN Type-5 VXLAN NDR runner
+# (ndr_evpn_vxlan.py) on the TRex VM, instead of the bench-trafficgen
+# trex-txrx binary search (which cannot craft VXLAN). Output is written to
+# binary_perf_log in the SAME location/format the stock binary_search uses, so
+# report_junitxml / upload_results_to_elk parse it unchanged.
+
+# The NDR runner is shipped INSIDE this role (files/ndr_evpn_vxlan.py), so the
+# test is self-contained -- no external_files staging needed. It is copied to the
+# TRex VM before running. Keep it in sync with the scenario profile of the same
+# name (ci-framework-jobs .../performance/profiles/ndr_evpn_vxlan.py).
+evpn_ndr_script_name: "ndr_evpn_vxlan.py"
+evpn_ndr_script_dest: "/home/{{ trex_user | default('cloud-user') }}/ndr_evpn_vxlan.py"
+
+# TRex install dir on the VM (matches launch_trex).
+evpn_trex_dir: "{{ trex_dir | default('/opt/trex/v3.06') }}"
+
+# Search parameters (passed positionally to ndr_evpn_vxlan.py).
+evpn_ndr_frame: 92          # on-wire bytes incl tunnel, excl FCS (EVPN floor)
+evpn_ndr_duration: 30       # seconds per trial
+evpn_ndr_lo: 100000         # search lower bound (pps). lo == hi -> single point
+evpn_ndr_hi: 2000000        # search upper bound (pps)
+
+# Where to collect the result (same vars the stock role uses).
+# binary_perf_log is provided by the scenario (e.g. evpn_vxlan_small.log).
+evpn_binary_search_run_log: "{{ binary_search_run_log | default('/tmp/evpn_ndr_run.log') }}"

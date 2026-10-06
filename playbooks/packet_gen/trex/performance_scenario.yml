@@ -151,8 +151,22 @@
     - role: roles/packet_gen/trex/launch_trex
       when: launch_trex | default(True)|bool
 
+    # EVPN Type-5 (VXLAN) path: set up the return route then run the
+    # self-contained VXLAN NDR runner. The stock bench-trafficgen binary search
+    # cannot craft VXLAN, so dut_type == 'evpn' branches here. dpdk/sriov are
+    # untouched (guarded below).
+    - role: roles/packet_gen/trex/evpn_return_path
+      when: dut_type | default('') == 'evpn'
+
+    - role: roles/packet_gen/trex/evpn_binary_search
+      when:
+        - binary_search | default(True)|bool
+        - dut_type | default('') == 'evpn'
+
     - role: roles/packet_gen/trex/binary_search
-      when: binary_search | default(True)|bool
+      when:
+        - binary_search | default(True)|bool
+        - dut_type | default('') != 'evpn'
 
 - hosts: "{{ dut_compute | default(omit) }}"
   become: true

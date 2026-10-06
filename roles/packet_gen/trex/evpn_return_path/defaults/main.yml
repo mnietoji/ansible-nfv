@@ -1,0 +1,37 @@
+---
+# EVPN Type-5 return-path parameters. Must match the OVN compute (DUT) and the
+# injected route. Defaults are the panther03 perf scenario values; override per
+# environment from the performance.yaml var_files.
+
+# NOTE: the compute / central-NB side (Static_MAC_Binding + tenant port-security)
+# is NOT done here -- the OVN NB is centralized in OCP and unreachable from the
+# test pod. It lives in performance/main.tf. This role only does the gobgp Type-5
+# inject on the TRex VM.
+
+# --- toggles ---
+evpn_return_path_gobgp: true               # inject the Type-5 route on the TRex VM
+
+# --- underlay / VTEPs ---
+evpn_rr_ip: "12.12.12.2"              # sw06 route-reflector
+evpn_asn: 64999
+evpn_vni: 1001
+evpn_rt: "64999:1001"                 # AS:VNI, matches compute-1
+evpn_trex_pf_ip: "12.12.12.20"        # TRex DPDK PF = return VXLAN next-hop
+evpn_trex_vf_ip: "12.12.12.21"        # gobgp session source (kernel VF)
+evpn_trex_vf_prefixlen: 24
+evpn_trex_pf_mac: "3c:fd:fe:33:a8:44" # remote VTEP router-mac
+evpn_compute_vtep_ip: "12.12.12.3"    # compute-1 EVPN VTEP
+
+# Kernel VF (inject) interface inside the TRex guest. The inject subnet has no
+# DHCP, so gobgpd's local address (evpn_trex_vf_ip) must be configured here.
+# Empty -> auto-detect the kernel netdev that already carries evpn_trex_vf_ip or,
+# failing that, the one holding no IP that is neither mgmt nor DPDK-bound.
+evpn_inject_ifname: ""
+
+# --- overlay / tenant ---
+evpn_remote_subnet: "192.168.99.0/24" # advertised as Type-5 (return route)
+evpn_rd: "12.12.12.21:2"
+
+# --- gobgp (baked into the perf image) ---
+evpn_gobgp_bin: "/usr/local/bin/gobgp"   # NOT in sudo secure_path
+evpn_gobgpd_service: "gobgpd"

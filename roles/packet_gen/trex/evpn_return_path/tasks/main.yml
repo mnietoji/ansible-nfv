@@ -1,0 +1,118 @@
+---
+# EVPN Type-5 return path setup.
+#
+# Makes the VM->remote direction forward so the TRex closed-loop NDR can measure
+# both directions. This role does ONE piece: it runs gobgp on the TRex VM to
+# inject the Type-5 route with the next-hop overridden to the TRex DPDK PF, so
+# the compute installs a VRF route back to the generator (control plane).
+#
+# The compute / central-NB side (Static_MAC_Binding + tenant port-security) is
+# NOT done here -- the OVN NB is centralized in OCP and unreachable from the test
+# pod. It lives in tofu (performance/main.tf) where oc + the overcloud client are
+# available on controller-0. See the NOTE at the bottom of this file.
+
+- name: EVPN return path | gobgp Type-5 inject (TRex VM)
+  when: evpn_return_path_gobgp | default(true) | bool
+  block:
+    - name: EVPN return path | auto-detect the inject VF netdev
+      when: evpn_inject_ifname | length == 0
+      block:
+        - name: EVPN return path | look for a kernel netdev already on the VF IP
+          ansible.builtin.shell: >-
+            set -o pipefail;
+            ip -o -4 addr show | awk '$4 ~ /^{{ evpn_trex_vf_ip }}\// {print $2; exit}'
+          args:
+            executable: /bin/bash
+          register: _evpn_vf_byip
+          changed_when: false
+
+        - name: EVPN return path | else pick the lone kernel netdev with no IPv4
+          when: _evpn_vf_byip.stdout | length == 0
+          ansible.builtin.shell: >-
+            set -o pipefail;
+            for i in $(ls /sys/class/net | grep -vE '^(lo|docker|virbr)'); do
+              [ -e "/sys/class/net/$i/device/driver" ] || continue;
+              ip -o -4 addr show dev "$i" | grep -q . || { echo "$i"; break; };
+            done
+          args:
+            executable: /bin/bash
+          register: _evpn_vf_noip
+          changed_when: false
+
+        - name: EVPN return path | set evpn_inject_ifname
+          ansible.builtin.set_fact:
+            evpn_inject_ifname: "{{ _evpn_vf_byip.stdout if _evpn_vf_byip.stdout | length > 0 else _evpn_vf_noip.stdout }}"
+
+    - name: EVPN return path | assert the inject VF was resolved
+      ansible.builtin.assert:
+        that: evpn_inject_ifname | length > 0
+        fail_msg: "Could not resolve the inject VF netdev; set evpn_inject_ifname."
+
+    - name: EVPN return path | bring up the inject VF with the gobgp local IP
+      become: true
+      ansible.builtin.command: >-
+        ip addr replace {{ evpn_trex_vf_ip }}/{{ evpn_trex_vf_prefixlen }}
+        dev {{ evpn_inject_ifname }}
+      changed_when: true
+
+    - name: EVPN return path | ensure the inject VF is up
+      become: true
+      ansible.builtin.command: "ip link set {{ evpn_inject_ifname }} up"
+      changed_when: true
+
+    - name: EVPN return path | ensure gobgpd is running
+      become: true
+      ansible.builtin.service:
+        name: "{{ evpn_gobgpd_service }}"
+        state: started
+        enabled: false
+
+    - name: EVPN return path | wait for the BGP session to the RR to come up
+      become: true
+      ansible.builtin.command: "{{ evpn_gobgp_bin }} neighbor {{ evpn_rr_ip }}"
+      register: _evpn_gobgp_nei
+      changed_when: false
+      retries: 12
+      delay: 5
+      until: "'Established' in _evpn_gobgp_nei.stdout"
+
+    # Idempotent: drop any stale copy of the route first, then (re)add it.
+    # gobgp identifies an EVPN Type-5 NLRI by its full key, so the del must carry
+    # the same fields as the add (prefix+rd alone -> "at least 5 args" error).
+    - name: EVPN return path | withdraw any stale Type-5 route
+      become: true
+      ansible.builtin.command: >-
+        {{ evpn_gobgp_bin }} global rib del -a evpn
+        prefix {{ evpn_remote_subnet }}
+        gw 0.0.0.0 etag 0 label {{ evpn_vni }}
+        rd {{ evpn_rd }} rt {{ evpn_rt }}
+        encap vxlan router-mac {{ evpn_trex_pf_mac }}
+        nexthop {{ evpn_trex_pf_ip }}
+      register: _evpn_gobgp_del
+      changed_when: false
+      failed_when: false
+
+    - name: EVPN return path | inject the Type-5 route (next-hop = TRex DPDK PF)
+      become: true
+      ansible.builtin.command: >-
+        {{ evpn_gobgp_bin }} global rib add -a evpn
+        prefix {{ evpn_remote_subnet }}
+        gw 0.0.0.0 etag 0 label {{ evpn_vni }}
+        rd {{ evpn_rd }} rt {{ evpn_rt }}
+        encap vxlan router-mac {{ evpn_trex_pf_mac }}
+        nexthop {{ evpn_trex_pf_ip }}
+      register: _evpn_gobgp_add
+      changed_when: _evpn_gobgp_add.rc == 0
+
+# --- compute / central-NB side is NOT handled here -------------------------
+# The OVN NB is CENTRALIZED in OCP (verified live: compute-1 has no
+# ovnnb_db.sock; only ovn_controller + ovn_agent, which talk to the central SB).
+# So the Static_MAC_Binding (NB table) and the tenant port-security cannot be set
+# from this ansible-nfv run (the test pod has no OCP/NB access). They are handled
+# in tofu instead, where oc + the overcloud client are available on controller-0:
+#   * tenant port port_security_enabled = false  -> port resource attribute.
+#   * Static_MAC_Binding (remote VTEP MAC pin)   -> null_resource + local-exec
+#     `oc -n openstack rsh <ovsdbserver-nb-pod> ovn-nbctl create Static_MAC_Binding`
+#     (created on apply, removed by a destroy-time provisioner).
+# See performance/main.tf. Only the gobgp inject (TRex VM, reachable over SSH)
+# lives here.
