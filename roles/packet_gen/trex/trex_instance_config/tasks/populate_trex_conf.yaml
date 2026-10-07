@@ -41,8 +41,33 @@
   set_fact:
     trex_full_nic_info: "{{ trex_full_nic_info | sort(attribute='pci_slot') }}"
 
-- name: Set Trex config Ports Info
+# Two dataplane NICs -> stock 2-port loopback (port 0 <-> port 1).
+- name: Set Trex config Ports Info (dual port)
   set_fact:
     trex_port_info: >-
       {{ trex_port_info | default([]) + [{'src_mac': trex_full_nic_info[0]['mac_address'], 'dest_mac': trex_full_nic_info[1]['mac_address'],'ip': trex_full_nic_info[0]['ip'], 'default_gw': trex_full_nic_info[1]['ip'] }] + [{'src_mac': trex_full_nic_info[1]['mac_address'], 'dest_mac': trex_full_nic_info[0]['mac_address'], 'ip': trex_full_nic_info[1]['ip'], 'default_gw': trex_full_nic_info[0]['ip'] }] }}
+  when: trex_full_nic_info | length > 1
+
+# Single dataplane NIC (EVPN perf: the PF only; return traffic comes back on the
+# same port). TRex refuses an odd number of interfaces, so port 1 is a 'dummy'
+# placeholder (see the trex_interfaces padding below) and real traffic stays on
+# port 0 -- the EVPN NDR runner only ever uses ports=[0]. dest_mac/default_gw
+# self-reference the real port; the runner crafts every on-wire MAC in scapy, so
+# these (and the dummy port's macs) are cosmetic.
+- name: Set Trex config Ports Info (single real port + dummy)
+  set_fact:
+    trex_port_info: >-
+      {{ [{'src_mac': trex_full_nic_info[0]['mac_address'], 'dest_mac': trex_full_nic_info[0]['mac_address'], 'ip': trex_full_nic_info[0]['ip'], 'default_gw': trex_full_nic_info[0]['ip'] },
+          {'src_mac': '00:00:00:00:00:00', 'dest_mac': '00:00:00:00:00:00' }] }}
+  when: trex_full_nic_info | length == 1
+
+# TRex rejects an odd interface count. Pad a lone real dataplane port with a
+# 'dummy' interface so TRex sees an even number; the real PF sorts first, so it
+# stays port 0. Only kicks in when trex_interfaces was not supplied explicitly.
+- name: Pad an odd dataplane port count with a TRex dummy interface
+  set_fact:
+    trex_interfaces: "{{ (trex_full_nic_info | map(attribute='pci_slot') | list | sort) + ['dummy'] }}"
+  when:
+    - trex_interfaces is not defined
+    - (trex_full_nic_info | length) is odd
 

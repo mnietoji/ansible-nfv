@@ -82,6 +82,7 @@
       vars:
         discover_dut_macs: True
         dpdk_binding_driver: "{{ dut_dpdk_binding_driver | default('vfio-pci') }}"
+        dpdk_nics: "{{ dut_dpdk_nics | default(omit) }}"
       when: bind_dpdk_nics | default(True)|bool
 
     - role: roles/packet_gen/trex/launch_testpmd
@@ -146,6 +147,7 @@
     - role: roles/packet_gen/trex/bind_dpdk_nics
       vars:
         dpdk_binding_driver: "{{ trex_dpdk_binding_driver | default('vfio-pci') }}"
+        dpdk_nics: "{{ trex_dpdk_nics | default(omit) }}"
       when: bind_dpdk_nics | default(True)|bool
 
     - role: roles/packet_gen/trex/launch_trex
@@ -158,6 +160,9 @@
     - role: roles/packet_gen/trex/evpn_return_path
       when: dut_type | default('') == 'evpn'
 
+    # Single-port EVPN Type-5 VXLAN NDR runner (round-trip on the TRex PF, port 0).
+    # The stock bench-trafficgen binary_search below needs two physical ports, so
+    # the EVPN path does not use it.
     - role: roles/packet_gen/trex/evpn_binary_search
       when:
         - binary_search | default(True)|bool
