@@ -14,9 +14,10 @@ binary_search branches to this script when dut_type == 'evpn'.
 
 It prints a result line that report_junitxml / gather_perf_info can parse:
 field $4 is the per-direction NDR in pps with a trailing ',' (stripped, then x2
-for the two directions), and the line contains the token 'tx_pps'. Example:
+for the two directions), and the line contains the quoted token '"tx_pps"' that
+the shared report_junitxml grep matches. Example:
 
-    EVPN_NDR tx_pps rx_pps 1575000,
+    EVPN_NDR "tx_pps" "rx_pps" 1575000,
 
 TRex must already be running interactively (launch_trex role does this):
     cd /opt/trex/vX.YY && sudo ./t-rex-64 -i --cfg /etc/trex_cfg.yaml
@@ -25,10 +26,16 @@ Port 0 = DPDK PF (underlay/VXLAN), L3 mode in trex_cfg.yaml (ARPs gw
 
 Usage:
     sudo python3 ndr_evpn_vxlan.py [TREX_DIR] [FRAME] [DUR_S] [LO_pps] [HI_pps]
-      FRAME    on-wire frame incl. tunnel, excl FCS (default 92 = EVPN floor)
-      DUR_S    seconds per trial (default 30)
-      LO/HI    binary-search bounds in pps (default 100000..2000000)
-               LO == HI runs a single point (no search).
+                                   [WARMUP_S] [WARMUP_PPS]
+      FRAME       on-wire frame incl. tunnel, excl FCS (default 92 = EVPN floor)
+      DUR_S       seconds per trial (default 30)
+      LO/HI       binary-search bounds in pps (default 100000..2000000)
+                  LO == HI runs a single point (no search).
+      WARMUP_S    sustained warm-up seconds before the search (default 120); must
+                  exceed pmd-auto-lb-rebal-interval so OVS auto-lb settles the rxq
+                  placement onto separate PMD cores first. 0 disables the warm-up.
+      WARMUP_PPS  warm-up rate (default 1200000); must exceed the colocated
+                  single-core ceiling to cross the auto-lb load-threshold.
 All encap constants below MUST match the injected Type-5 route (see smoke_run.py
 and the evpn_return_path role).
 """
@@ -41,6 +48,9 @@ FRAME    = int(sys.argv[2]) if len(sys.argv) > 2 else 92
 DUR      = int(sys.argv[3]) if len(sys.argv) > 3 else 30
 LO       = int(sys.argv[4]) if len(sys.argv) > 4 else 100000
 HI       = int(sys.argv[5]) if len(sys.argv) > 5 else 2000000
+# Sustained warm-up so OVS auto-lb settles the rxq placement before the search.
+WARMUP_S   = int(sys.argv[6]) if len(sys.argv) > 6 else 120
+WARMUP_PPS = int(sys.argv[7]) if len(sys.argv) > 7 else 1200000
 
 # ---- EVPN underlay/overlay parameters (match the injected Type-5 route) ----
 OUTER_SMAC  = "3c:fd:fe:33:a8:44"   # TRex PF MAC
@@ -109,8 +119,18 @@ def main():
         print(f"on-wire frame (excl FCS) = {onwire} B (+4 FCS = {onwire + 4}); "
               f"target {FRAME}", flush=True)
 
-        # warm-up (avoids the cold-start binary-search artifact)
-        trial(c, LO, 10)
+        # Sustained high-rate warm-up: keep the (initially colocated) PMD core
+        # saturated for longer than pmd-auto-lb-rebal-interval so OVS auto-lb
+        # rebalances the rxqs onto separate PMD cores BEFORE the strict-0-loss
+        # search. Otherwise the 30s-on/30s-off binary-search trials never sustain
+        # load across a full rebal interval, so auto-lb fires too late and the
+        # search converges against the transient colocated layout (~half rate).
+        # Loss here is expected and ignored; WARMUP_PPS must exceed the colocated
+        # single-core ceiling to cross the auto-lb load-threshold.
+        if WARMUP_S > 0:
+            print(f"warm-up: {WARMUP_PPS // 1000}kpps for {WARMUP_S}s "
+                  f"(let OVS auto-lb settle the rxq placement)", flush=True)
+            trial(c, WARMUP_PPS, WARMUP_S)
 
         if LO == HI:
             ndr = LO if trial(c, LO, DUR) else 0
@@ -122,8 +142,11 @@ def main():
                     ndr, lo = mid, mid
                 else:
                     hi = mid
-        # result line parsed by report_junitxml / gather_perf_info (field $4):
-        print(f"EVPN_NDR tx_pps rx_pps {ndr},", flush=True)
+        # result line parsed by report_junitxml / gather_perf_info (field $4).
+        # The tokens are quoted on purpose: report_junitxml greps for the literal
+        # '"tx_pps"' (the stock trafficgen log format), so the EVPN line must
+        # carry the same quoted token to be picked up by that shared role.
+        print(f'EVPN_NDR "tx_pps" "rx_pps" {ndr},', flush=True)
     finally:
         try:
             c.stop(ports=[0])

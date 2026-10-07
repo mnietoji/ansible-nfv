@@ -74,7 +74,7 @@
       changed_when: false
       retries: 12
       delay: 5
-      until: "'Established' in _evpn_gobgp_nei.stdout"
+      until: "'established' in _evpn_gobgp_nei.stdout | lower"
 
     # Idempotent: drop any stale copy of the route first, then (re)add it.
     # gobgp identifies an EVPN Type-5 NLRI by its full key, so the del must carry
