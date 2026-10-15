@@ -11,3 +11,14 @@ trex_platform:
 
 # Workaround - can't define this variable inside playbook
 trex_full_nic_info: []
+
+# Which neutron SR-IOV vnic_types to turn into TRex dataplane ports. The stock
+# flow wants both a direct-physical PF and a direct VF (2-port loopback). The
+# EVPN perf setup drives a single port (the PF) and keeps its SR-IOV VF as a
+# kernel netdev for the gobgp return-path, so it overrides this to
+# ['direct-physical'] (and trex_expected_sriov_nics: 1). TRex refuses a config
+# mixing a PF (net_i40e) and its VF (net_iavf) anyway.
+trex_sriov_vnic_types:
+  - direct-physical
+  - direct
+trex_expected_sriov_nics: 2

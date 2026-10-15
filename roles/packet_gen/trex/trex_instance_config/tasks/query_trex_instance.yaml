@@ -12,13 +12,12 @@
   set_fact:
     trex_instance_sriov_nics: "{{ trex_instance_sriov_nics | default([]) + [item] }}"
   loop: "{{ instance_nics | flatten(levels=1) }}"
-  when: item['binding_vnic_type'] == "direct-physical" or
-        item['binding_vnic_type'] == "direct"
+  when: item['binding_vnic_type'] in trex_sriov_vnic_types
 
-- name: Fail If There Are More/Less Than 2 SR-IOV NICs
+- name: Fail If There Are An Unexpected Number Of SR-IOV NICs
   fail:
-    msg: "Current automated flow only supports 2 SR-IOV NICs connected to instance, please provide an instance with the allowed number of NICs"
-  when: trex_instance_sriov_nics | length != 2
+    msg: "Current automated flow expects {{ trex_expected_sriov_nics }} SR-IOV NIC(s) of type {{ trex_sriov_vnic_types }} connected to instance, found {{ trex_instance_sriov_nics | default([]) | length }}"
+  when: trex_instance_sriov_nics | default([]) | length != trex_expected_sriov_nics
 
 - name: Gather Ansible Facts
   setup:

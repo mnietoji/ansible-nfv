@@ -1,14 +1,41 @@
+# When dpdk_nics is given, bind exactly those and leave every other NIC up.
+# Otherwise fall back to the heuristic: keep the default-route NIC (assumed to be
+# mgmt) and bind the rest. That heuristic breaks when mgmt has no gateway (the
+# default route then lives on a dataplane NIC, so mgmt gets torn down) or when a
+# NIC must stay in the kernel (e.g. the EVPN inject VF), so prefer dpdk_nics.
 - name: Retrieve default NIC
   set_fact:
     nic_def: "{{hostvars[inventory_hostname]['ansible_default_ipv4']['alias']}}"
+  when: dpdk_nics is not defined
 
 - name: Retrieve all NICs
   set_fact:
     nic_lst: "{{hostvars[inventory_hostname]['ansible_interfaces']}}"
+  when: dpdk_nics is not defined
 
 - name: List of NICs to be bound to DPDK
   set_fact:
     nic_down: "{{ nic_lst | difference([nic_def]+['lo'])  }}"
+  when: dpdk_nics is not defined
+
+- name: List of NICs to be bound to DPDK (explicit)
+  set_fact:
+    nic_down: "{{ dpdk_nics }}"
+  when: dpdk_nics is defined
+
+# Idempotency: a NIC already bound to DPDK (persistent driverctl override) has no
+# kernel netdev after a reboot, so skip any requested NIC that is no longer a
+# kernel interface -- it is already bound. testpmd/TRex auto-probe all vfio-pci
+# devices, so nothing else needs its PCI slot here.
+- name: Check which requested NICs still exist in the kernel
+  stat:
+    path: "/sys/class/net/{{ item }}"
+  loop: "{{ nic_down }}"
+  register: nic_down_present
+
+- name: Keep only kernel-present NICs for DPDK binding
+  set_fact:
+    nic_down: "{{ nic_down_present.results | selectattr('stat.exists') | map(attribute='item') | list }}"
 
 - name: Deactivate NICs to be bound to DPDK
   shell: "ip link set dev {{ item }} down"
