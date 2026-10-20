@@ -1,4 +1,15 @@
-report_junitxml_perf_result_threshold: "{{ 2700000 if dut_type == 'dpdk' else 27000000 }}"
+# Perf gate threshold (pps). EVPN Type-5 is inherently ~1.5 Mpps -- a single-flow
+# NDR through VXLAN encap on one TRex port -- so the generic non-dpdk 27M would
+# flag every healthy run as a failure. Use 1,000,000 for EVPN: a healthy run is
+# ~1.57 Mpps, a degraded single-PMD run ~0.86 Mpps, and an ECMP/origination break
+# is 0 -- 1M cleanly passes healthy and fails the regressions.
+report_junitxml_perf_result_threshold: "{{ 1000000 if dut_type == 'evpn' else (2700000 if dut_type == 'dpdk' else 27000000) }}"
+# Aggregate multiplier for the reported pps. The stock dpdk/sriov NDR drives
+# bidirectional traffic from TWO TRex ports, so the per-port tx_pps is doubled to
+# report the aggregate. The EVPN runner (ndr_evpn_vxlan.py) uses a SINGLE TRex
+# port (the forward VXLAN and its return path share port 0), so there is no
+# second interface to aggregate -- report the measured NDR as-is (x1).
+report_junitxml_perf_multiplier: "{{ 1 if dut_type | default('') == 'evpn' else 2 }}"
 report_junitxml_failures: 0
 report_junitxml_errors: 0
 report_junitxml_junitxml_output_path: /var/lib/AnsibleTests/external_files/{{ dut_type }}_perf_results.xml

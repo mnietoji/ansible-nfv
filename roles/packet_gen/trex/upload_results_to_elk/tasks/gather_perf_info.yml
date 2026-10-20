@@ -1,6 +1,9 @@
 ---
+# EVPN drives a SINGLE TRex port (forward VXLAN + its return share port 0), so
+# the per-port tx_pps must NOT be doubled the way the stock 2-port dpdk/sriov NDR
+# is. Mirror report_junitxml's dut_type-conditional multiplier here too.
 - name: get perf results for scenario
-  shell: set -o pipefail && grep tx_pps /tmp/{{ dut_type }}_performance.log | awk 'END{ print int(substr($4, 1, length(    $4)-1) *2) }'
+  shell: set -o pipefail && grep tx_pps /tmp/{{ dut_type }}_performance.log | awk 'END{ print int(substr($4, 1, length(    $4)-1) *{{ 1 if dut_type | default('') == 'evpn' else 2 }}) }'
   register: perf_results
 
 - name: get OVN version for scenario
