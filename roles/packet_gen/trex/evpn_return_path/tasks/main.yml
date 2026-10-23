@@ -60,11 +60,21 @@
       ansible.builtin.command: "ip link set {{ evpn_inject_ifname }} up"
       changed_when: true
 
-    - name: EVPN return path | ensure gobgpd is running
+    # The image bakes a gobgpd.conf for one environment (panther03 12.12.12.x);
+    # render it from the role vars so the session targets this env's RR.
+    - name: EVPN return path | render gobgpd.conf for this environment
+      become: true
+      ansible.builtin.template:
+        src: gobgpd.conf.j2
+        dest: "{{ evpn_gobgpd_conf }}"
+        mode: "0644"
+      register: _evpn_gobgpd_conf
+
+    - name: EVPN return path | ensure gobgpd is running with the rendered config
       become: true
       ansible.builtin.service:
         name: "{{ evpn_gobgpd_service }}"
-        state: started
+        state: "{{ 'restarted' if _evpn_gobgpd_conf is changed else 'started' }}"
         enabled: false
 
     - name: EVPN return path | wait for the BGP session to the RR to come up

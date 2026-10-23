@@ -42,11 +42,14 @@ Usage:
 All encap constants below MUST match the injected Type-5 route (see smoke_run.py
 and the evpn_return_path role).
 
-The two deployment-specific MACs are taken from the environment when set, so the
-evpn_return_path role can discover them live and pass them in (constants are the
+The deployment-specific values are taken from the environment when set, so the
+evpn_return_path role can discover/pass them in (constants are the panther03
 manual-run fallback):
-    EVPN_OUTER_DMAC  compute vlan178 port MAC (regenerated every reimage)
-    EVPN_INNER_RMAC  OVN tenant router-MAC (neutron-allocated per deploy)
+    EVPN_OUTER_DMAC       compute underlay port MAC (regenerated every reimage)
+    EVPN_INNER_RMAC       OVN tenant router-MAC (neutron-allocated per deploy)
+    EVPN_TREX_PF_MAC      TRex DPDK PF MAC (outer SRC + advertised router-mac)
+    EVPN_TREX_PF_IP       TRex remote VTEP IP (outer SRC)
+    EVPN_COMPUTE_VTEP_IP  compute EVPN VTEP IP (outer DST)
 """
 import sys
 import struct
@@ -63,21 +66,21 @@ WARMUP_S   = int(sys.argv[6]) if len(sys.argv) > 6 else 120
 WARMUP_PPS = int(sys.argv[7]) if len(sys.argv) > 7 else 1200000
 
 # ---- EVPN underlay/overlay parameters (match the injected Type-5 route) ----
-OUTER_SMAC  = "3c:fd:fe:33:a8:44"   # TRex PF MAC (stable: physical NIC)
+OUTER_SMAC  = os.environ.get("EVPN_TREX_PF_MAC") or "3c:fd:fe:33:a8:44"  # TRex PF MAC
 # OUTER_DMAC (compute vlan178 OVS-internal port MAC) is regenerated on every
 # compute reimage, so it is discovered live by the evpn_return_path role (ARP of
 # the compute VTEP) and passed in via EVPN_OUTER_DMAC. The literal is only a
 # fallback for a manual run; an empty/unset env var falls back to it.
 OUTER_DMAC  = os.environ.get("EVPN_OUTER_DMAC") or "96:c4:26:ff:cf:ab"
-OUTER_SRC   = "12.12.12.20"         # TRex underlay / remote VTEP
-OUTER_DST   = "12.12.12.3"          # compute-1 EVPN VTEP
+OUTER_SRC   = os.environ.get("EVPN_TREX_PF_IP") or "12.12.12.20"     # TRex remote VTEP
+OUTER_DST   = os.environ.get("EVPN_COMPUTE_VTEP_IP") or "12.12.12.3"  # compute-1 VTEP
 VXLAN_DPORT = 4789                  # ovn-evpn 4789 OVS/DPDK dataplane tunnel
 VNI         = 1001
 # INNER_RMAC = OVN tenant router-MAC (inner DST): neutron-allocated per deploy,
 # discovered live from the gobgp RIB (the compute's Type-5 router-mac) and passed
 # in via EVPN_INNER_RMAC; the literal is only a manual-run fallback.
 INNER_RMAC  = os.environ.get("EVPN_INNER_RMAC") or "fa:16:3e:97:ca:bb"
-INNER_SMAC  = "3c:fd:fe:33:a8:44"   # TRex advertised RMAC (inner SRC)
+INNER_SMAC  = OUTER_SMAC            # TRex advertised RMAC (inner SRC)
 INNER_SRC   = "192.168.99.10"       # emulated remote-subnet host
 INNER_DST   = "192.168.77.221"      # tenant workload VM on compute-1
 INNER_DPORT = 7777                  # NOT 53/67/68/546/547 (OVN ls punt flows)

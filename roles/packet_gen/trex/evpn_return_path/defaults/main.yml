@@ -47,3 +47,4 @@ evpn_discover_macs: true
 # --- gobgp (baked into the perf image) ---
 evpn_gobgp_bin: "/usr/local/bin/gobgp"   # NOT in sudo secure_path
 evpn_gobgpd_service: "gobgpd"
+evpn_gobgpd_conf: "/etc/gobgpd.conf"     # rendered from the vars above (ExecStart -f)

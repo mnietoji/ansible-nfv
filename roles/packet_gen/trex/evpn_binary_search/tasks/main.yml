@@ -26,9 +26,14 @@
   # Deployment-specific MACs discovered live by the evpn_return_path role. When a
   # fact is unset/empty the runner falls back to its built-in literal, so a manual
   # run without discovery still works.
+  # The underlay/PF values come from the evpn_return_path vars so the outer
+  # encap matches the injected Type-5 route in every environment.
   environment:
     EVPN_OUTER_DMAC: "{{ evpn_outer_dmac | default('') }}"
     EVPN_INNER_RMAC: "{{ evpn_inner_rmac | default('') }}"
+    EVPN_TREX_PF_MAC: "{{ evpn_trex_pf_mac | default('') }}"
+    EVPN_TREX_PF_IP: "{{ evpn_trex_pf_ip | default('') }}"
+    EVPN_COMPUTE_VTEP_IP: "{{ evpn_compute_vtep_ip | default('') }}"
   changed_when: true
   register: evpn_ndr_output
   ignore_errors: true
