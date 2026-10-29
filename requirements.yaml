@@ -6,3 +6,6 @@ collections:
   # DO NOT use newer collection, this will cause unexpected issues
   - name: openstack.cloud
   - name: kubernetes.core
+  # openvswitch_db (compute_tuning / pmd_load_balance / multiqueue_configs) moved
+  # out of community.general into this collection.
+  - name: openvswitch.openvswitch

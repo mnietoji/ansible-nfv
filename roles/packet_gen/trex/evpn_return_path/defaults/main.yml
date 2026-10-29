@@ -1,0 +1,51 @@
+---
+# EVPN Type-5 return-path parameters. Must match the OVN compute (DUT) and the
+# injected route. Defaults are the reference-lab values (12.12.12.0/24 underlay); override per
+# environment from the performance.yaml var_files.
+
+# NOTE: the compute / central-NB side (Static_MAC_Binding + tenant port-security)
+# is NOT done here -- the OVN NB is centralized in OCP and unreachable from the
+# test pod. It lives in performance/main.tf. This role only does the gobgp Type-5
+# inject on the TRex VM.
+
+# --- toggles ---
+evpn_return_path_gobgp: true               # inject the Type-5 route on the TRex VM
+
+# --- underlay / VTEPs ---
+evpn_rr_ip: "12.12.12.2"              # ToR route-reflector
+evpn_asn: 64999
+evpn_vni: 1001
+evpn_rt: "64999:1001"                 # AS:VNI, matches compute-1
+evpn_trex_pf_ip: "12.12.12.20"        # TRex DPDK PF = return VXLAN next-hop
+evpn_trex_vf_ip: "12.12.12.21"        # gobgp session source (kernel VF)
+evpn_trex_vf_prefixlen: 24
+evpn_trex_pf_mac: "3c:fd:fe:33:a8:44" # remote VTEP router-mac
+evpn_compute_vtep_ip: "12.12.12.3"    # compute-1 EVPN VTEP
+
+# Kernel VF (inject) interface inside the TRex guest. The inject subnet has no
+# DHCP, so gobgpd's local address (evpn_trex_vf_ip) must be configured here.
+# Empty -> auto-detect the kernel netdev that already carries evpn_trex_vf_ip or,
+# failing that, the one holding no IP that is neither mgmt nor DPDK-bound.
+evpn_inject_ifname: ""
+
+# --- overlay / tenant ---
+evpn_remote_subnet: "192.168.99.0/24" # advertised as Type-5 (return route)
+evpn_rd: "12.12.12.21:2"
+# Tenant subnet behind the COMPUTE's VTEP. Any Type-5 the compute advertises
+# inside it (the whole /24, or the /32 host routes neutron's advertise_host
+# originates) carries the OVN tenant router-MAC == the NDR runner's INNER_RMAC.
+# Used only for the live MAC discovery below.
+evpn_tenant_subnet: "192.168.77.0/24"
+
+# --- dynamic MAC discovery (FIX C) ---
+# OUTER_DMAC (compute vlan178 port MAC, regenerated every reimage) and INNER_RMAC
+# (OVN tenant router-MAC, neutron-allocated per deploy) are deployment-specific.
+# Discover them live on the TRex VM and export as facts (evpn_outer_dmac /
+# evpn_inner_rmac) for the evpn_binary_search role, instead of hardcoding them in
+# the runner. Set false to keep the runner's built-in fallback literals.
+evpn_discover_macs: true
+
+# --- gobgp (baked into the perf image) ---
+evpn_gobgp_bin: "/usr/local/bin/gobgp"   # NOT in sudo secure_path
+evpn_gobgpd_service: "gobgpd"
+evpn_gobgpd_conf: "/etc/gobgpd.conf"     # rendered from the vars above (ExecStart -f)

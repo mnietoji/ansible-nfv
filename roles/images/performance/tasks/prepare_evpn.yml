@@ -1,0 +1,41 @@
+- name: Create EVPN staging directory
+  tempfile:
+    state: directory
+    suffix: evpn_image
+  register: evpn_stage
+
+- name: Download and extract gobgp static binaries
+  unarchive:
+    src: "{{ gobgp_url }}/v{{ gobgp_version }}/gobgp_{{ gobgp_version }}_linux_amd64.tar.gz"
+    dest: "{{ evpn_stage.path }}"
+    remote_src: true
+    include:
+      - gobgp
+      - gobgpd
+
+- name: Render gobgpd config
+  template:
+    src: gobgpd.conf.j2
+    dest: "{{ evpn_stage.path }}/gobgpd.conf"
+    mode: '0644'
+
+- name: Stage gobgpd service unit
+  copy:
+    src: gobgpd.service
+    dest: "{{ evpn_stage.path }}/gobgpd.service"
+    mode: '0644'
+
+- name: Bake EVPN tooling into guest image
+  command: >-
+    virt-customize -a {{ fetched_image }}
+    --copy-in {{ evpn_stage.path }}/gobgp:/usr/local/bin
+    --copy-in {{ evpn_stage.path }}/gobgpd:/usr/local/bin
+    --copy-in {{ evpn_stage.path }}/gobgpd.conf:/etc
+    --copy-in {{ evpn_stage.path }}/gobgpd.service:/etc/systemd/system
+    --run-command "chmod 0755 /usr/local/bin/gobgp /usr/local/bin/gobgpd"
+    --run-command "chmod 0644 /etc/gobgpd.conf /etc/systemd/system/gobgpd.service"
+
+- name: Remove EVPN staging directory
+  file:
+    path: "{{ evpn_stage.path }}"
+    state: absent

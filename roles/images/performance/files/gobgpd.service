@@ -1,0 +1,11 @@
+[Unit]
+Description=GoBGP EVPN Type-5 injector (perf return-route)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/gobgpd -f /etc/gobgpd.conf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
