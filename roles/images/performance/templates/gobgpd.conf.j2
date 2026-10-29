@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+# Placeholder gobgpd config baked into the image; the evpn_return_path role
+# re-renders it at run time for the environment under test.
+[global.config]
+  as = {{ evpn_gobgp_asn }}
+  router-id = "{{ evpn_gobgp_local_ip }}"
+  local-address-list = ["{{ evpn_gobgp_local_ip }}"]
+
+[[neighbors]]
+  [neighbors.config]
+    neighbor-address = "{{ evpn_gobgp_rr_ip }}"
+    peer-as = {{ evpn_gobgp_asn }}
+  [neighbors.transport.config]
+    local-address = "{{ evpn_gobgp_local_ip }}"
+  [[neighbors.afi-safis]]
+    [neighbors.afi-safis.config]
+      afi-safi-name = "l2vpn-evpn"

@@ -1,11 +1,11 @@
 # Image Variables
-guest_image: 'http://download.hosts.prod.upshift.rdu2.redhat.com/rhel-9/rel-eng/RHEL-9/latest-RHEL-9.5.0/compose/BaseOS/x86_64/images/rhel-guest-image-9.5-20241009.2.x86_64.qcow2'
+guest_image: 'https://example.com/images/rhel-guest-image-9.8-20260408.3.x86_64.qcow2'
 guest_image_output: '/tmp/'
 guest_debug: False
 
 # Repo Variables
 repo_urls:
-  - http://download.hosts.prod.upshift.rdu2.redhat.com/rhel-9/rel-eng/RHEL-9/latest-RHEL-9.5.0/repofile.repo
+  - https://example.com/repos/rhel-9.8/repofile.repo
 repo_dir: '/tmp/guest_repos'
 guest_repos: []
 
@@ -13,6 +13,13 @@ guest_repos: []
 trex_version: 'v3.06'
 trex_url: 'https://trex-tgn.cisco.com/trex/release'
 trex_dir: '/opt/trex/'
+
+# EVPN Variables (prepare_evpn)
+gobgp_version: '4.10.0'
+gobgp_url: 'https://github.com/osrg/gobgp/releases/download'
+evpn_gobgp_asn: 64999
+evpn_gobgp_local_ip: '12.12.12.21'
+evpn_gobgp_rr_ip: '12.12.12.2'
 
 # Trafficgen Variables
 trafficgen_git: 'https://github.com/perftool-incubator/bench-trafficgen'
@@ -22,9 +29,9 @@ trafficgen_branch: 'main'
 # Customize users Variables
 custom_users:
   - user: root
-    password: password
+    password: changeme
   - user: cloud-user
-    password: password
+    password: changeme
 # selinux config
 selinux_config: disabled
 

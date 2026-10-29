@@ -28,6 +28,22 @@ The prepare_performance_images role performs the following tasks:
 * prepare_repo - Executed if 'true'. True by default.
 * prepare_trex - Executed if 'true'. True by default.
 * prepare_dpdk - Executed if 'true'. True by default.
+* prepare_evpn - Executed if 'true'. False by default. Bakes the EVPN Type-5
+  perf tooling: gobgp/gobgpd static binaries + `gobgpd.service` +
+  `/etc/gobgpd.conf` (placeholder, re-rendered at run time by the
+  `evpn_return_path` role, see `evpn_gobgp_*` vars), FRR with bgpd enabled and
+  `/root/evpn_remote_vtep.sh` (kernel software VTEP for functional tests).
+  `gobgp_version` pins the gobgp release (default 4.10.0).
+
+Example, build the EVPN perf image on the local host:
+```
+ansible-playbook -i localhost, -c local playbooks/images/prepare_performance_images.yml \
+  -e customization_host=localhost -e prepare_evpn=true \
+  -e guest_image=https://example.com/images/rhel-guest-image-9.8.x86_64.qcow2 \
+  -e '{"repo_urls": ["https://example.com/repos/rhel-9.8/repofile.repo"]}'
+```
+`guest_image` and `repo_urls` default to placeholder URLs: point them at the
+RHEL guest image and repo file reachable from the customization host.
 
 ## Role variables
 #### Image details
@@ -132,7 +148,7 @@ Dictoniary containg users to be created:
 ```
 custom_users:
   - user: root
-    password: 12345678
+    password: changeme
 ```
 
 ### User defined Variables

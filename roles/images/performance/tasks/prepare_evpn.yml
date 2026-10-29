@@ -1,0 +1,51 @@
+- name: Create EVPN staging directory
+  tempfile:
+    state: directory
+    suffix: evpn_image
+  register: evpn_stage
+
+- name: Download and extract gobgp static binaries
+  unarchive:
+    src: "{{ gobgp_url }}/v{{ gobgp_version }}/gobgp_{{ gobgp_version }}_linux_amd64.tar.gz"
+    dest: "{{ evpn_stage.path }}"
+    remote_src: true
+    include:
+      - gobgp
+      - gobgpd
+
+- name: Render gobgpd config
+  template:
+    src: gobgpd.conf.j2
+    dest: "{{ evpn_stage.path }}/gobgpd.conf"
+    mode: '0644'
+
+- name: Stage EVPN helper files
+  copy:
+    src: "{{ item }}"
+    dest: "{{ evpn_stage.path }}/{{ item }}"
+    mode: preserve
+  loop:
+    - gobgpd.service
+    - evpn_remote_vtep.sh
+
+- name: Bake EVPN tooling into guest image
+  command: >-
+    virt-customize -a {{ fetched_image }}
+    --copy-in {{ evpn_stage.path }}/gobgp:/usr/local/bin
+    --copy-in {{ evpn_stage.path }}/gobgpd:/usr/local/bin
+    --copy-in {{ evpn_stage.path }}/evpn_remote_vtep.sh:/root
+    --copy-in {{ evpn_stage.path }}/gobgpd.conf:/etc
+    --copy-in {{ evpn_stage.path }}/gobgpd.service:/etc/systemd/system
+    --run-command "chmod 0755 /usr/local/bin/gobgp /usr/local/bin/gobgpd /root/evpn_remote_vtep.sh"
+    --run-command "chmod 0644 /etc/gobgpd.conf /etc/systemd/system/gobgpd.service"
+
+- name: Install FRR inside guest image
+  command: virt-customize -a {{ fetched_image }} --run-command "yum install frr -y && yum clean all"
+
+- name: Enable bgpd in FRR
+  command: virt-customize -a {{ fetched_image }} --run-command "sed -i 's/^bgpd=no/bgpd=yes/' /etc/frr/daemons"
+
+- name: Remove EVPN staging directory
+  file:
+    path: "{{ evpn_stage.path }}"
+    state: absent

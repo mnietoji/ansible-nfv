@@ -2,7 +2,7 @@
 - name: Get perf results from file
   block:
     - name: Get perf results for scenario
-      ansible.builtin.shell: set -o pipefail && grep \"tx_pps\" {{ binary_perf_log }} | awk 'END{ print int(substr($4, 1, length(    $4)-1) *2) }'
+      ansible.builtin.shell: set -o pipefail && grep \"tx_pps\" {{ binary_perf_log }} | awk 'END{ print int(substr($4, 1, length(    $4)-1) *{{ report_junitxml_perf_multiplier }}) }'
       register: perf_results
       failed_when: perf_results.rc != 0
       changed_when: false

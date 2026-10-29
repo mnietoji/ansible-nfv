@@ -4,5 +4,6 @@
     - "curl -k {{ trex_url }}/{{ trex_version }}.tar.gz -o /tmp/{{ trex_version }}.tar.gz"
     - "mkdir -p {{ trex_dir }}"
     - "tar zxf /tmp/{{ trex_version }}.tar.gz -C {{ trex_dir }}"
+    - "rm -f /tmp/{{ trex_version }}.tar.gz"
     - "ln -sf {{ trex_dir }}/{{ trex_version }} {{ trex_dir }}/current"
     - "ln /bin/python3 /bin/python||echo \"\""

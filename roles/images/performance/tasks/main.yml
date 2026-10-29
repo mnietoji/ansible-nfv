@@ -18,6 +18,10 @@
   include_tasks: prepare_trex.yml
   when: prepare_trex | default(True) | bool
 
+- name: Customize Guest Image - EVPN Flow
+  include_tasks: prepare_evpn.yml
+  when: prepare_evpn | default(False) | bool
+
 - name: Customize Guest Image - HCI IO's
   include_tasks: prepare_guest_hci.yml
   when: prepare_guest_hci | default(False) | bool

@@ -34,9 +34,13 @@
         --rxq={{hostvars[dut_compute]['multiqueue']}} \
         --txq={{hostvars[dut_compute]['multiqueue']}} \
       {% endif %}
+      {% if trex_macs.split(',') | length == 1 %}
+        --port-topology=loop \
+      {% endif %}
       {% if forward_mode == 'mac' %}
-        --eth-peer=0,{{ trex_macs.split(',')[0] }} \
-        --eth-peer=1,{{ trex_macs.split(',')[1] }} \
+        {% for mac in trex_macs.split(',') %}
+        --eth-peer={{ loop.index0 }},{{ mac }} \
+        {% endfor %}
       {% endif %}
       {% if testpmd_verbose > 0 %}
         --cmdline-file=/tmp/cmdline \

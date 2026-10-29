@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+[global.config]
+  as = {{ evpn_asn }}
+  router-id = "{{ evpn_trex_vf_ip }}"
+  local-address-list = ["{{ evpn_trex_vf_ip }}"]
+
+[[neighbors]]
+  [neighbors.config]
+    neighbor-address = "{{ evpn_rr_ip }}"
+    peer-as = {{ evpn_asn }}
+  [neighbors.transport.config]
+    local-address = "{{ evpn_trex_vf_ip }}"
+  [[neighbors.afi-safis]]
+    [neighbors.afi-safis.config]
+      afi-safi-name = "l2vpn-evpn"
